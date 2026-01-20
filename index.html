@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+!DOCTYPE html>
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
@@ -77,6 +77,7 @@
             const [useSSL, setUseSSL] = useState(false);
             const [useTCP, setUseTCP] = useState(false);
             const [logMessages, setLogMessages] = useState([]);
+            const logContainerRef = useRef(null);
             
             // 定義五層模型
             const layers = [
@@ -127,6 +128,13 @@
             const addLog = (msg) => {
                 setLogMessages(prev => [...prev, { time: new Date().toLocaleTimeString(), text: msg }]);
             };
+
+            // 自動捲動日誌到底部
+            useEffect(() => {
+                if (logContainerRef.current) {
+                    logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
+                }
+            }, [logMessages]);
 
             // 判斷某一層是否正在互動 (用於 Highlight)
             const isLayerActive = (layerId) => {
@@ -929,8 +937,6 @@
                         </div>
                     ))
                     )}
-                    {/* 自動捲動到底部的 dummy element */}
-                    <div ref={(el) => el && el.scrollIntoView({ behavior: "smooth" })}></div>
                 </div>
                 </div>
             );
