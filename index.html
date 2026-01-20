@@ -1,0 +1,943 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TCP/IP 模型互動模擬</title>
+    <!-- 載入 Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 載入 React 和 ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <!-- 載入 Babel 用於解析 JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <style>
+        /* 僅保留基礎轉場，移除所有位移與閃爍動畫 */
+        body {
+            touch-action: manipulation;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // --- 圖示元件 ---
+        const IconBase = ({ size = 24, className = "", children }) => (
+            <svg 
+                xmlns="http://www.w3.org/2000/svg" 
+                width={size} 
+                height={size} 
+                viewBox="0 0 24 24" 
+                fill="none" 
+                stroke="currentColor" 
+                strokeWidth="2" 
+                strokeLinecap="round" 
+                strokeLinejoin="round" 
+                className={className}
+            >
+                {children}
+            </svg>
+        );
+
+        const ArrowDown = (props) => <IconBase {...props}><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></IconBase>;
+        const ArrowUp = (props) => <IconBase {...props}><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></IconBase>;
+        const ArrowRight = (props) => <IconBase {...props}><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></IconBase>;
+        const ArrowLeft = (props) => <IconBase {...props}><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></IconBase>;
+        const Lock = (props) => <IconBase {...props}><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></IconBase>;
+        const Unlock = (props) => <IconBase {...props}><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></IconBase>;
+        const Server = (props) => <IconBase {...props}><rect width="20" height="8" x="2" y="2" rx="2" ry="2"/><rect width="20" height="8" x="2" y="14" rx="2" ry="2"/><line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/></IconBase>;
+        const Laptop = (props) => <IconBase {...props}><path d="M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16"/></IconBase>;
+        const Play = (props) => <IconBase {...props}><polygon points="5 3 19 12 5 21 5 3"/></IconBase>;
+        const Pause = (props) => <IconBase {...props}><rect width="4" height="16" x="6" y="4"/><rect width="4" height="16" x="14" y="4"/></IconBase>;
+        const RotateCcw = (props) => <IconBase {...props}><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></IconBase>;
+        const ShieldCheck = (props) => <IconBase {...props}><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></IconBase>;
+        const StepForward = (props) => <IconBase {...props}><line x1="6" x2="6" y1="4" y2="20"/><polygon points="10 4 20 12 10 20 10 4"/></IconBase>;
+        const Key = (props) => <IconBase {...props}><path d="m21 2-2 2m-7.6 7.6a6.5 6.5 0 1 1 2.2-2.3"/><circle cx="8" cy="16" r="3"/><path d="m14.5 9.5-2.5 2.5"/></IconBase>;
+        const FileText = (props) => <IconBase {...props}><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></IconBase>;
+        const Shield = (props) => <IconBase {...props}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></IconBase>;
+        const PenTool = (props) => <IconBase {...props}><path d="m12 19 7-7 3 3-7 7-3-3z"/><path d="m18 13-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="m2 2 7.586 7.586"/><circle cx="11" cy="11" r="2"/></IconBase>;
+        const CheckCircle = (props) => <IconBase {...props}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></IconBase>;
+        const Hash = (props) => <IconBase {...props}><line x1="4" x2="20" y1="9" y2="9"/><line x1="4" x2="20" y1="15" y2="15"/><line x1="10" x2="8" y1="3" y2="21"/><line x1="16" x2="14" y1="3" y2="21"/></IconBase>;
+        const Dice = (props) => <IconBase {...props}><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><path d="M16 8h.01"/><path d="M8 8h.01"/><path d="M8 16h.01"/><path d="M16 16h.01"/><path d="M12 12h.01"/></IconBase>;
+        const Network = (props) => <IconBase {...props}><rect x="16" y="16" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="9" y="2" width="6" height="6" rx="1"/><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"/><path d="M12 12V8"/></IconBase>;
+        const Activity = (props) => <IconBase {...props}><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></IconBase>;
+
+        // --- 主要應用程式邏輯 ---
+        const TCPIPModel = () => {
+            // 狀態管理
+            const [isAutoPlay, setIsAutoPlay] = useState(false);
+            const [stage, setStage] = useState('idle'); // idle, tcp_handshake, ssl_handshake, encapsulation, transmission, decapsulation, finished
+            const [handshakeStep, setHandshakeStep] = useState(0); // 0-5 for SSL handshake
+            const [tcpStep, setTcpStep] = useState(0); // 0-3 for TCP handshake
+            const [currentLayer, setCurrentLayer] = useState(-1); // 0-4 (App to Physical)
+            const [useSSL, setUseSSL] = useState(false);
+            const [useTCP, setUseTCP] = useState(false);
+            const [logMessages, setLogMessages] = useState([]);
+            
+            // 定義五層模型
+            const layers = [
+                { 
+                id: 0, 
+                name: '應用層 (Application)', 
+                desc: '產生數據 (HTTP/SMTP)', 
+                header: 'Data', 
+                color: 'bg-red-100 border-red-500 text-red-700',
+                pdu: 'Data' 
+                },
+                { 
+                id: 1, 
+                name: '傳輸層 (Transport)', 
+                desc: '建立端口連接 (TCP/UDP)', 
+                header: 'TCP Header', 
+                color: 'bg-blue-100 border-blue-500 text-blue-700',
+                pdu: 'Segment'
+                },
+                { 
+                id: 2, 
+                name: '網路層 (Network)', 
+                desc: 'IP 定址與路由', 
+                header: 'IP Header', 
+                color: 'bg-green-100 border-green-500 text-green-700',
+                pdu: 'Packet'
+                },
+                { 
+                id: 3, 
+                name: '資料連結層 (Data Link)', 
+                desc: 'MAC 實體定址', 
+                header: 'Frame Header', 
+                footer: 'FCS', 
+                color: 'bg-yellow-100 border-yellow-500 text-yellow-700',
+                pdu: 'Frame'
+                },
+                { 
+                id: 4, 
+                name: '實體層 (Physical)', 
+                desc: '位元流傳輸 (0/1)', 
+                header: 'Preamble', 
+                color: 'bg-gray-100 border-gray-500 text-gray-700',
+                pdu: 'Bits'
+                }
+            ];
+
+            // 輔助函式：新增日誌
+            const addLog = (msg) => {
+                setLogMessages(prev => [...prev, { time: new Date().toLocaleTimeString(), text: msg }]);
+            };
+
+            // 判斷某一層是否正在互動 (用於 Highlight)
+            const isLayerActive = (layerId) => {
+                if (stage === 'tcp_handshake' && layerId === 1) return true; // Transport Layer
+                if (stage === 'ssl_handshake' && layerId === 0) return true; // Application Layer (SSL sits here/below)
+                if (stage === 'encapsulation' && currentLayer === layerId) return true;
+                if (stage === 'decapsulation' && currentLayer === layerId) return true;
+                return false;
+            };
+
+            // 判斷某一層是否應該變暗 (Dimmed)
+            const isLayerDimmed = (layerId) => {
+                if (stage === 'idle' || stage === 'finished') return false;
+                // 在握手階段，非互動層級變暗
+                if (stage === 'tcp_handshake' && layerId !== 1) return true;
+                if (stage === 'ssl_handshake' && layerId !== 0) return true;
+                // 在傳輸階段，非當前層級不變暗(保持可見)，或可選擇變暗
+                return false;
+            };
+
+            // 核心邏輯：執行下一步
+            const handleNextStep = () => {
+                // 1. Idle -> Start Sequence
+                if (stage === 'idle') {
+                    setLogMessages([]);
+                    if (useTCP) {
+                        setStage('tcp_handshake');
+                        setTcpStep(1);
+                        addLog("TCP: 開始建立傳輸層連線 (三向交握)...");
+                        addLog("TCP Handshake [1/3]: SYN (Client 請求連線)");
+                    } else if (useSSL) {
+                        setStage('ssl_handshake');
+                        setHandshakeStep(1);
+                        addLog("SSL/TLS: 偵測到安全連線需求，開始握手程序...");
+                        addLog("Handshake [1/5]: Client Hello (發送亂數 A (鹽) 與加密套件列表)");
+                    } else {
+                        setStage('encapsulation');
+                        setCurrentLayer(0);
+                        addLog("應用層: 開始產生資料 (無加密)...");
+                    }
+                    return;
+                }
+
+                // 1.5 TCP Handshake Sequence
+                if (stage === 'tcp_handshake') {
+                    if (tcpStep === 1) {
+                        setTcpStep(2);
+                        addLog("TCP Handshake [2/3]: SYN-ACK (Server 同意連線並確認)");
+                        return;
+                    }
+                    if (tcpStep === 2) {
+                        setTcpStep(3);
+                        addLog("TCP Handshake [3/3]: ACK (Client 確認，連線建立成功)");
+                        return;
+                    }
+                    if (tcpStep === 3) {
+                        // TCP Finished, check for SSL or Data
+                        setTcpStep(0);
+                        if (useSSL) {
+                            setStage('ssl_handshake');
+                            setHandshakeStep(1);
+                            addLog("SSL/TLS: TCP 連線已建立，開始進行 TLS 握手...");
+                            addLog("Handshake [1/5]: Client Hello (發送亂數 A (鹽) 與加密套件列表)");
+                        } else {
+                            setStage('encapsulation');
+                            setCurrentLayer(0);
+                            addLog("應用層: TCP 連線已建立，開始產生資料...");
+                        }
+                        return;
+                    }
+                }
+
+                // 2. SSL Handshake Sequence
+                if (stage === 'ssl_handshake') {
+                    if (handshakeStep === 1) {
+                        setHandshakeStep(2);
+                        addLog("Handshake [2/5]: Server Hello + Certificate (傳送公鑰 🟢，亂數 B 🎲)");
+                        return;
+                    }
+                    if (handshakeStep === 2) {
+                        setHandshakeStep(3);
+                        addLog("Handshake [3/5]: Digital Signature (非對稱金鑰: Server 用私鑰 🔴 簽署，Client 用公鑰 🟢 驗證，確認伺服器身分)");
+                        return;
+                    }
+                    if (handshakeStep === 3) {
+                        setHandshakeStep(4);
+                        addLog("Handshake [4/5]: Client Key Exchange (Client 用公鑰 🟢 加密「預主密鑰」，Server 用私鑰 🔴 解密取得該密鑰)");
+                        return;
+                    }
+                    if (handshakeStep === 4) {
+                        setHandshakeStep(5);
+                        addLog("Handshake [5/5]: Session Key Generation (使用 Hash / PRF 混合運算生成對稱金鑰 🟡)");
+                        return;
+                    }
+                    if (handshakeStep === 5) {
+                        setStage('encapsulation');
+                        setCurrentLayer(0);
+                        setHandshakeStep(0); // Reset for next time
+                        addLog("應用層: 安全通道建立完成，後續傳輸將使用對稱金鑰 🟡 進行加密...");
+                        return;
+                    }
+                }
+
+                // 3. Encapsulation (Sender: 0 -> 4)
+                if (stage === 'encapsulation') {
+                    if (currentLayer < 4) {
+                        const nextLayer = currentLayer + 1;
+                        setCurrentLayer(nextLayer);
+                        addLog(`發送端 [${layers[nextLayer].name}]: 加上 ${layers[nextLayer].header}，封裝資料...`);
+                    } else {
+                        setStage('transmission');
+                        addLog("實體層: 將數位訊號轉換為電子訊號，通過網際網路傳輸...");
+                    }
+                    return;
+                }
+
+                // 4. Transmission
+                if (stage === 'transmission') {
+                    setStage('decapsulation');
+                    setCurrentLayer(4); // Receiver starts at 4
+                    addLog("接收端 [實體層]: 收到訊號，還原為位元流...");
+                    return;
+                }
+
+                // 5. Decapsulation (Receiver: 4 -> 0)
+                if (stage === 'decapsulation') {
+                    if (currentLayer > 0) {
+                        const nextLayer = currentLayer - 1;
+                        setCurrentLayer(nextLayer);
+                        addLog(`接收端 [${layers[currentLayer].name}]: 移除 ${layers[currentLayer].header}，讀取 ${layers[currentLayer].pdu}...`);
+                    } else {
+                        setStage('finished');
+                        setIsAutoPlay(false);
+                        const finalMsg = useSSL 
+                            ? "應用層: 使用對稱金鑰解密資料。傳輸完成！" 
+                            : "應用層: 資料傳輸完成！用戶收到訊息。";
+                        addLog(finalMsg);
+                    }
+                    return;
+                }
+            };
+
+            // 自動播放控制
+            useEffect(() => {
+                let timer;
+                const delay = (stage === 'ssl_handshake' || stage === 'tcp_handshake') ? 3000 : 1500;
+                
+                if (isAutoPlay && stage !== 'finished') {
+                    timer = setTimeout(() => {
+                        handleNextStep();
+                    }, delay); 
+                }
+                return () => clearTimeout(timer);
+            }, [isAutoPlay, stage, currentLayer, handshakeStep, tcpStep]);
+
+            // 開始自動播放
+            const startAutoPlay = () => {
+                if (stage === 'finished') resetSimulation();
+                setIsAutoPlay(true);
+            };
+
+            // 暫停
+            const pauseSimulation = () => {
+                setIsAutoPlay(false);
+            };
+
+            // 重置
+            const resetSimulation = () => {
+                setIsAutoPlay(false);
+                setStage('idle');
+                setCurrentLayer(-1);
+                setHandshakeStep(0);
+                setTcpStep(0);
+                setLogMessages([]);
+            };
+
+            // 判斷發送端封包是否顯示
+            const showSenderPacket = (layerId) => {
+                if (stage === 'idle' || stage === 'ssl_handshake' || stage === 'tcp_handshake') return false;
+                if (stage === 'encapsulation') return layerId <= currentLayer;
+                return true; 
+            };
+
+            // 判斷接收端封包是否顯示
+            const showReceiverPacket = (layerId) => {
+                if (stage === 'idle' || stage === 'ssl_handshake' || stage === 'tcp_handshake' || stage === 'encapsulation' || stage === 'transmission') return false;
+                if (stage === 'decapsulation') return layerId >= currentLayer;
+                return true;
+            };
+
+            // 渲染封包內容
+            const renderPacket = (layerIndex, isSender) => {
+                if (layerIndex === 4) {
+                return (
+                    <div className="font-mono text-xs tracking-widest text-gray-600 break-all bg-gray-50 px-2 py-1 rounded border border-gray-200">
+                    10110100...
+                    </div>
+                );
+                }
+
+                let headers = [];
+                const maxLayer = layerIndex;
+
+                if (maxLayer >= 3) headers.push(
+                <div key="eth" className="px-2 py-1 bg-yellow-500 text-white text-xs font-bold border-r border-white/20">ETH</div>
+                );
+                
+                if (maxLayer >= 2) headers.push(
+                <div key="ip" className="px-2 py-1 bg-green-500 text-white text-xs font-bold border-r border-white/20">IP</div>
+                );
+
+                if (maxLayer >= 1) headers.push(
+                <div key="tcp" className="px-2 py-1 bg-blue-500 text-white text-xs font-bold border-r border-white/20">TCP</div>
+                );
+
+                if (useSSL && maxLayer >= 0) headers.push(
+                <div key="ssl" className="px-2 py-1 bg-purple-600 text-white text-xs font-bold border-r border-white/20 flex items-center">
+                    <Lock size={10} className="mr-1" /> TLS
+                </div>
+                );
+
+                const showEncrypted = useSSL && layerIndex > 0;
+                
+                headers.push(
+                <div key="data" className={`px-3 py-1 text-xs font-bold flex items-center min-w-[60px] justify-center
+                    ${showEncrypted ? 'bg-purple-100 text-purple-800' : 'bg-white text-gray-800'}`}>
+                    {showEncrypted ? '***Encrypted***' : 'Hello World'}
+                </div>
+                );
+
+                if (maxLayer >= 3) headers.push(
+                <div key="fcs" className="px-2 py-1 bg-yellow-500 text-white text-xs font-bold border-l border-white/20">FCS</div>
+                );
+
+                return (
+                <div className="flex shadow-md rounded overflow-hidden border border-gray-300 scale-90 origin-left transition-all duration-300">
+                    {headers}
+                </div>
+                );
+            };
+
+            // 渲染握手階段 (SSL/TCP) 的視覺化元件
+            const renderVisualOverlay = () => {
+                // 如果不是握手階段，不顯示
+                if (stage !== 'ssl_handshake' && stage !== 'tcp_handshake') return null;
+
+                // --- TCP Handshake Visuals ---
+                if (stage === 'tcp_handshake') {
+                    return (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center z-20 bg-slate-50/95 backdrop-blur-sm rounded-lg p-2 border-2 border-blue-200">
+                            <div className="text-blue-700 font-bold mb-2 text-lg pt-1">
+                                TCP 三向交握 ({tcpStep}/3)
+                                <span className="block text-xs font-normal text-slate-500 mt-1">互動層級：傳輸層 (Layer 4)</span>
+                            </div>
+                            
+                            <div className="flex items-center justify-between w-full max-w-2xl mb-2 relative mt-4 h-32">
+                                {/* Client */}
+                                <div className="flex flex-col items-center w-28">
+                                    <Laptop size={48} className="text-blue-600 mb-2" />
+                                    <span className="text-sm font-bold text-gray-600">Client</span>
+                                </div>
+
+                                {/* TCP Animation Flow */}
+                                <div className="flex-1 px-2 flex flex-col items-center justify-center z-10 relative">
+                                    {tcpStep === 1 && (
+                                        <div className="flex flex-col items-center w-full">
+                                            <div className="bg-blue-100 text-blue-700 px-4 py-2 rounded-lg font-bold border border-blue-300 shadow-sm flex items-center gap-2 mb-2 w-full justify-center">
+                                                <span>SYN</span>
+                                                <span className="text-[10px] text-gray-500">(Seq=x)</span>
+                                            </div>
+                                            <ArrowRight size={40} className="text-blue-400" />
+                                        </div>
+                                    )}
+                                    {tcpStep === 2 && (
+                                        <div className="flex flex-col items-center w-full">
+                                            <div className="bg-green-100 text-green-700 px-4 py-2 rounded-lg font-bold border border-green-300 shadow-sm flex items-center gap-2 mb-2 w-full justify-center">
+                                                <span>SYN-ACK</span>
+                                                <span className="text-[10px] text-gray-500">(Seq=y, Ack=x+1)</span>
+                                            </div>
+                                            <ArrowLeft size={40} className="text-green-400" />
+                                        </div>
+                                    )}
+                                    {tcpStep === 3 && (
+                                        <div className="flex flex-col items-center w-full">
+                                            <div className="bg-blue-100 text-blue-700 px-4 py-2 rounded-lg font-bold border border-blue-300 shadow-sm flex items-center gap-2 mb-2 w-full justify-center">
+                                                <span>ACK</span>
+                                                <span className="text-[10px] text-gray-500">(Seq=x+1, Ack=y+1)</span>
+                                            </div>
+                                            <ArrowRight size={40} className="text-blue-400" />
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Server */}
+                                <div className="flex flex-col items-center w-28">
+                                    <Server size={48} className="text-green-600 mb-2" />
+                                    <span className="text-sm font-bold text-gray-500">Server</span>
+                                </div>
+                            </div>
+                            <div className="text-sm text-gray-600 mt-4 font-medium bg-white px-4 py-2 rounded border border-gray-200">
+                                {tcpStep === 1 ? "步驟 1: 客戶端發送 SYN 請求建立連線" : 
+                                 tcpStep === 2 ? "步驟 2: 伺服器回覆 SYN-ACK 同意連線" : 
+                                 "步驟 3: 客戶端發送 ACK 確認，連線已建立"}
+                            </div>
+                        </div>
+                    );
+                }
+
+                // --- SSL Handshake Visuals (Existing) ---
+                const stepInfo = [
+                    { title: "Client Hello", desc: "Client發送支援的加密法 + 亂數 A (鹽)" },
+                    { title: "Server Hello", desc: "伺服器傳送憑證 (內含公鑰 🟢)，私鑰 🔴 保留在伺服器" },
+                    { title: "Digital Signature", desc: "Server 用私鑰 🔴 簽署 (證明身分)，Client 用公鑰 🟢 驗證 (數位簽章)" },
+                    { title: "Key Exchange", desc: "Client 用公鑰 🟢 加密「預主密鑰」，Server 用私鑰 🔴 解密取得該密鑰" },
+                    { title: "Session Key Gen", desc: "使用 Hash / PRF 混合亂數與密鑰，生成對稱金鑰 🟡" }
+                ];
+
+                const currentStepData = stepInfo[handshakeStep - 1];
+                if (!currentStepData) return null;
+
+                return (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center z-20 bg-slate-50/95 backdrop-blur-sm rounded-lg p-2 border-2 border-purple-200">
+                        <div className="text-purple-700 font-bold mb-2 text-lg pt-1">
+                            TLS 握手階段 ({handshakeStep}/5)
+                            <span className="block text-xs font-normal text-slate-500 mt-1">互動層級：應用層 (Layer 5)</span>
+                        </div>
+                        
+                        <div className="flex items-center justify-between w-full max-w-2xl mb-2 relative mt-1">
+                             {/* Client Icon Column */}
+                             <div className="flex flex-col items-center w-28 relative">
+                                <Laptop size={48} className="text-blue-600 mb-2" />
+                                <span className="text-sm font-bold text-gray-600">Client</span>
+                                
+                                {/* Client 持有物 - 靜態列表 */}
+                                <div className="mt-2 flex flex-col gap-1 items-center w-full">
+                                    {handshakeStep >= 2 && (
+                                        <div className="flex items-center gap-1 text-[10px] text-green-700 bg-green-50 px-2 py-1 rounded border border-green-200 w-full justify-center">
+                                            <Key size={10} /> <span>持有公鑰</span>
+                                        </div>
+                                    )}
+                                    {handshakeStep === 3 && (
+                                        <div className="flex items-center gap-1 text-[10px] text-blue-700 bg-blue-50 px-2 py-1 rounded border border-blue-200 w-full justify-center">
+                                            <CheckCircle size={10} /> <span>驗證成功</span>
+                                        </div>
+                                    )}
+                                </div>
+                             </div>
+
+                             {/* Middle: Animation Flow - 移除所有動畫，改為靜態呈現 */}
+                             <div className="flex-1 px-2 flex flex-col items-center relative h-28 justify-center z-10">
+                                
+                                {/* Step 1: Client Hello */}
+                                {handshakeStep === 1 && (
+                                    <div className="flex flex-col items-center">
+                                        <ArrowRight size={40} className="text-slate-400" />
+                                        <div className="flex items-center gap-1 mt-1">
+                                            <span className="text-xs font-bold text-slate-500">Client Hello</span>
+                                        </div>
+                                        <div className="flex items-center gap-1 bg-blue-50 border border-blue-200 px-2 py-1 rounded mt-1 text-[10px] text-blue-600">
+                                            <Dice size={12} />
+                                            <span>亂數 A</span>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Step 2: Server Hello (Static Arrow) */}
+                                {handshakeStep === 2 && (
+                                    <div className="flex flex-col items-center">
+                                        <ArrowLeft size={40} className="text-green-500" />
+                                        <div className="flex gap-1 mt-1">
+                                            <div className="flex items-center gap-1 bg-white border border-green-200 px-2 py-1 rounded">
+                                                <span className="text-xs font-bold text-green-600">公鑰</span>
+                                                <Key size={12} className="text-green-600" />
+                                            </div>
+                                            <div className="flex items-center gap-1 bg-green-50 border border-green-200 px-2 py-1 rounded text-[10px] text-green-600">
+                                                <Dice size={12} />
+                                                <span>亂數 B</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Step 3: 數位簽章 (雙欄位 - 靜態) */}
+                                {handshakeStep === 3 && (
+                                    <div className="flex w-full justify-between items-center h-full gap-2">
+                                        {/* Left: Client Verify */}
+                                        <div className="flex flex-col items-center p-2 border border-green-200 rounded bg-green-50 shadow-sm w-24 bg-white">
+                                             <div className="text-[10px] font-bold text-green-700 mb-1">Client 驗證</div>
+                                             <div className="flex items-center gap-1 mb-1">
+                                                 <FileText size={14} className="text-blue-500" />
+                                                 <span className="text-[10px] text-gray-400">+</span>
+                                                 <Key size={12} className="text-green-500" />
+                                             </div>
+                                             <ArrowDown size={12} className="text-gray-400 my-0.5" />
+                                             <CheckCircle size={14} className="text-green-600" />
+                                        </div>
+
+                                        {/* Center: Arrow */}
+                                        <div className="flex flex-col items-center">
+                                            <ArrowLeft size={32} className="text-blue-400" />
+                                            <span className="text-[10px] text-blue-500 font-mono mt-1">傳送簽章</span>
+                                        </div>
+
+                                        {/* Right: Server Sign */}
+                                        <div className="flex flex-col items-center p-2 border border-blue-200 rounded bg-blue-50 shadow-sm w-24 bg-white">
+                                             <div className="text-[10px] font-bold text-blue-700 mb-1">Server 簽署</div>
+                                             <div className="flex items-center gap-1 mb-1">
+                                                 <Key size={12} className="text-red-600" />
+                                             </div>
+                                             <ArrowDown size={12} className="text-gray-400 my-0.5" />
+                                             <div className="flex items-center gap-1">
+                                                 <PenTool size={12} className="text-blue-600" />
+                                             </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Step 4: 金鑰交換 (雙欄位 - 靜態) */}
+                                {handshakeStep === 4 && (
+                                    <div className="flex w-full justify-between items-center h-full gap-2">
+                                        {/* Left: Encryption */}
+                                        <div className="flex flex-col items-center p-2 border border-green-200 rounded bg-green-50 shadow-sm w-28 bg-white">
+                                            <div className="text-[10px] font-bold text-green-700 mb-1">Client 加密</div>
+                                            <div className="flex items-center gap-1 mb-1">
+                                                <div className="flex flex-col items-center">
+                                                    <div className="w-3 h-3 bg-red-400 rounded-full border border-red-500"></div>
+                                                    <span className="text-[8px] text-red-500 scale-90 whitespace-nowrap">預主密鑰</span>
+                                                </div>
+                                                <span className="text-[10px] text-gray-400">+</span>
+                                                <div className="flex flex-col items-center">
+                                                    <Key size={12} className="text-green-500" />
+                                                    <span className="text-[8px] text-green-600 scale-90">公鑰</span>
+                                                </div>
+                                            </div>
+                                            <ArrowDown size={12} className="text-gray-400 my-0.5" />
+                                            <Lock size={14} className="text-purple-600" />
+                                        </div>
+
+                                        {/* Center: Arrow */}
+                                        <div className="flex flex-col items-center">
+                                            <ArrowRight size={32} className="text-purple-400" />
+                                            <span className="text-[10px] text-purple-500 font-mono mt-1">傳輸密文</span>
+                                        </div>
+
+                                        {/* Right: Decryption */}
+                                        <div className="flex flex-col items-center p-2 border border-red-200 rounded bg-red-50 shadow-sm w-28 bg-white">
+                                            <div className="text-[10px] font-bold text-red-700 mb-1">Server 解密</div>
+                                            <div className="flex items-center gap-1 mb-1">
+                                                <Lock size={14} className="text-purple-600" />
+                                                <span className="text-[10px] text-gray-400">+</span>
+                                                <div className="flex flex-col items-center">
+                                                    <Key size={12} className="text-red-600" />
+                                                    <span className="text-[8px] text-red-600 scale-90">私鑰</span>
+                                                </div>
+                                            </div>
+                                            <ArrowDown size={12} className="text-gray-400 my-0.5" />
+                                            <div className="flex flex-col items-center">
+                                                <div className="w-3 h-3 bg-red-400 rounded-full border border-red-500"></div>
+                                                <span className="text-[8px] text-red-500 scale-90 whitespace-nowrap">預主密鑰</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Step 5: Symmetric Key Gen */}
+                                {handshakeStep === 5 && (
+                                    <div className="flex flex-col items-center w-full">
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <span className="text-xs bg-gray-100 px-1 rounded text-gray-500">亂數A</span>
+                                            <span className="text-[10px] text-gray-400">+</span>
+                                            <span className="text-xs bg-gray-100 px-1 rounded text-gray-500">亂數B</span>
+                                            <span className="text-[10px] text-gray-400">+</span>
+                                            <span className="text-xs bg-red-100 px-1 rounded text-red-500">預主密鑰</span>
+                                        </div>
+                                        
+                                        <div className="flex items-center justify-center bg-blue-50 border border-blue-200 rounded px-3 py-1 mb-2 shadow-sm">
+                                            <Hash size={16} className="text-blue-600 mr-1" />
+                                            <span className="text-xs font-bold text-blue-700">Hash / PRF</span>
+                                        </div>
+                                        <ArrowDown size={16} className="text-gray-300 mb-1" />
+
+                                        <div className="flex gap-16 w-full justify-center">
+                                            <div className="text-yellow-500 flex flex-col items-center">
+                                                <Key size={28} />
+                                            </div>
+                                            <div className="text-yellow-500 flex flex-col items-center">
+                                                <Key size={28} />
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                             </div>
+
+                             {/* Server Icon Column */}
+                             <div className="flex flex-col items-center w-28 relative">
+                                <Server size={48} className="text-green-600 mb-2" />
+                                <span className="text-sm font-bold text-gray-500">Server</span>
+                                
+                                {/* Server 持有物 - 靜態列表 */}
+                                <div className="mt-2 flex flex-col gap-1 items-center w-full">
+                                    <div className="flex items-center gap-1 text-[10px] text-red-700 bg-red-50 px-2 py-1 rounded border border-red-200 w-full justify-center">
+                                        <Key size={10} /> <span>持有私鑰</span>
+                                    </div>
+                                </div>
+                             </div>
+                        </div>
+
+                        <div className="text-sm text-gray-700 text-center bg-white p-3 rounded-lg shadow-sm border border-slate-200 w-full max-w-lg z-20 relative flex flex-col items-center">
+                            <div className="font-bold text-purple-700 mb-1 border-b border-slate-100 pb-1">
+                                {handshakeStep === 3 ? "數位簽章階段 (身分驗證)" : (handshakeStep === 2 || handshakeStep === 4 ? "非對稱加密階段" : "協定階段")}
+                            </div>
+                            <div>
+                                {currentStepData.desc}
+                            </div>
+                        </div>
+                    </div>
+                );
+            };
+
+            return (
+                <div className="min-h-screen p-4 md:p-8">
+                
+                {/* 標題區：放寬到 7xl */}
+                <div className="max-w-[90%] md:max-w-7xl mx-auto mb-2 text-center">
+                    <h1 className="text-2xl md:text-3xl font-bold text-slate-900 mb-2">
+                    TCP/IP 模型封包封裝與拆解展示
+                    </h1>
+                    <p className="text-sm text-slate-600">
+                    觀察資料在每一層的變化，以及 SSL/TLS 如何透過握手建立安全通道。
+                    </p>
+                </div>
+
+                {/* 控制面板：放寬到 7xl */}
+                <div className="max-w-[90%] md:max-w-7xl mx-auto bg-white p-2 rounded-xl shadow-sm border border-slate-200 mb-2">
+                    <div className="flex flex-wrap gap-4 items-center justify-between">
+                    
+                    <div className="flex items-center gap-2 flex-wrap">
+                        {/* 自動播放按鈕 */}
+                        {!isAutoPlay ? (
+                        <button 
+                        onClick={startAutoPlay} 
+                        disabled={stage === 'finished'}
+                        className={`flex items-center gap-2 px-5 py-2 rounded-lg font-bold text-white transition-all
+                            ${stage === 'finished' ? 'bg-slate-300 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700 shadow-md'}`}
+                        >
+                        <Play size={18} />
+                        自動播放
+                        </button>
+                        ) : (
+                        <button 
+                        onClick={pauseSimulation} 
+                        className="flex items-center gap-2 px-5 py-2 rounded-lg font-bold text-white bg-amber-500 hover:bg-amber-600 shadow-md transition-all"
+                        >
+                        <Pause size={18} />
+                        暫停
+                        </button>
+                        )}
+
+                        {/* 逐步執行按鈕 */}
+                        <button 
+                        onClick={() => { setIsAutoPlay(false); handleNextStep(); }}
+                        disabled={stage === 'finished'}
+                        className={`flex items-center gap-2 px-5 py-2 rounded-lg font-bold text-white transition-all
+                            ${stage === 'finished' ? 'bg-slate-300 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 shadow-md'}`}
+                        >
+                        <StepForward size={18} />
+                        逐步執行
+                        </button>
+
+                        <button 
+                        onClick={resetSimulation}
+                        className="flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700 transition-all ml-2"
+                        >
+                        <RotateCcw size={18} />
+                        重置
+                        </button>
+                    </div>
+
+                    <div className="flex items-center gap-4">
+                        {/* TCP 開關 */}
+                        <div 
+                            className={`flex items-center gap-2 px-4 py-2 rounded-lg border cursor-pointer transition-all select-none
+                            ${useTCP ? 'bg-blue-50 border-blue-200' : 'bg-slate-100 border-slate-200'}`} 
+                            onClick={() => {
+                            if (stage === 'idle') setUseTCP(!useTCP);
+                            }}
+                        >
+                            <div className={`w-5 h-5 rounded flex items-center justify-center transition-colors ${useTCP ? 'bg-blue-600 text-white' : 'bg-gray-300 text-gray-500'}`}>
+                            {useTCP ? <Network size={14} /> : null}
+                            </div>
+                            <span className={`text-sm font-medium ${useTCP ? 'text-blue-700' : 'text-slate-500'}`}>
+                            啟用 TCP 三向交握
+                            </span>
+                        </div>
+
+                        {/* SSL 開關 */}
+                        <div 
+                            className={`flex items-center gap-2 px-4 py-2 rounded-lg border cursor-pointer transition-all select-none
+                            ${useSSL ? 'bg-purple-50 border-purple-200' : 'bg-slate-100 border-slate-200'}`} 
+                            onClick={() => {
+                            if (stage === 'idle') setUseSSL(!useSSL);
+                            }}
+                        >
+                            <div className={`w-5 h-5 rounded flex items-center justify-center transition-colors ${useSSL ? 'bg-purple-600 text-white' : 'bg-gray-300 text-gray-500'}`}>
+                            {useSSL ? <ShieldCheck size={14} /> : null}
+                            </div>
+                            <span className={`text-sm font-medium ${useSSL ? 'text-purple-700' : 'text-slate-500'}`}>
+                            啟用 SSL/TLS 加密
+                            </span>
+                            {stage !== 'idle' && <span className="text-xs text-red-400 ml-1">(重置後可更改)</span>}
+                        </div>
+                    </div>
+                    </div>
+                </div>
+
+                {/* 主要視覺區：固定高度 h-[460px] 搭配 grid grid-rows-5 均分 */}
+                <div className="max-w-[90%] md:max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-10 gap-2 mb-2 relative h-[460px]">
+                    
+                    {/* 左側：發送端 (Sender) */}
+                    <div className={`bg-white rounded-xl shadow-sm border border-slate-200 p-2 relative overflow-hidden transition-all duration-700 ease-in-out flex flex-col
+                        ${(stage === 'ssl_handshake' || stage === 'tcp_handshake') ? 'md:col-span-3' : 'md:col-span-4'}`}>
+                        {/* Session Key Indicator (Sender) */}
+                        {useSSL && stage !== 'idle' && stage !== 'handshake' && stage !== 'ssl_handshake' && stage !== 'tcp_handshake' && (
+                            <div className="absolute top-2 right-2 bg-yellow-100 text-yellow-700 px-2 py-1 rounded-full text-xs font-bold flex items-center gap-1 border border-yellow-300 z-20">
+                                <Key size={12} /> 對稱金鑰已就緒
+                            </div>
+                        )}
+
+                        <div className="flex items-center gap-2 mb-2 pb-2 border-b border-slate-100 h-10 shrink-0">
+                            <Laptop className="text-blue-600" />
+                            <h2 className="font-bold text-lg">發送端 (封裝)</h2>
+                        </div>
+                        
+                        <div className="flex-1 grid grid-rows-5 relative">
+                            {layers.map((layer) => {
+                                const isActive = isLayerActive(layer.id);
+                                const isDimmed = isLayerDimmed(layer.id);
+                                
+                                return (
+                                <div 
+                                    key={`sender-${layer.id}`}
+                                    className={`p-1 rounded-lg border transition-all duration-300 flex justify-between items-center relative
+                                    ${layer.color} /* Always apply base color */
+                                    ${isActive ? 'border-2 !border-slate-800 shadow-lg scale-[1.02] z-10' : 'border-opacity-50'}
+                                    ${isDimmed ? 'opacity-20 grayscale' : ''}`}
+                                >
+                                    <div className="w-1/3">
+                                        <div className="font-bold text-sm text-slate-700 truncate">{layer.name}</div>
+                                        <div className="text-[10px] text-slate-500 leading-tight truncate">{layer.desc}</div>
+                                    </div>
+                                    
+                                    {/* Active Badge - Moved INSIDE top right corner */}
+                                    {isActive && (stage === 'tcp_handshake' || stage === 'ssl_handshake') && (
+                                        <div className="absolute right-2 top-1 bg-yellow-500 text-white text-[10px] px-2 py-0.5 rounded-full shadow-sm flex items-center gap-1 z-20 animate-pulse">
+                                            <Activity size={10} /> 互動中
+                                        </div>
+                                    )}
+                                    
+                                    {/* 封包展示區 */}
+                                    <div className="flex-1 flex justify-end h-8">
+                                    {showSenderPacket(layer.id) && (
+                                        <div className="animate-fade-in-left">
+                                        {renderPacket(layer.id, true)}
+                                        </div>
+                                    )}
+                                    </div>
+                                </div>
+                            )})}
+                            
+                            {/* 動態箭頭 - 使用百分比定位 */}
+                            {stage === 'encapsulation' && (
+                            <div className="absolute left-6 text-blue-500 z-10 transition-all duration-300" 
+                                style={{ top: `${currentLayer * 20 + 10}%`, transform: 'translateY(-50%)' }}>
+                                <ArrowDown size={28} className="animate-bounce" />
+                            </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* 中間：網際網路 (Internet) */}
+                    <div className={`flex flex-col justify-center items-center relative py-8 px-2 transition-all duration-700 ease-in-out h-full
+                        ${(stage === 'ssl_handshake' || stage === 'tcp_handshake') ? 'md:col-span-4' : 'md:col-span-2'}`}>
+                        <div className="absolute inset-y-0 w-0.5 bg-slate-200 left-1/2 -z-10"></div>
+                        
+                        {/* === 握手視覺化層 (Overlay) === */}
+                        {renderVisualOverlay()}
+
+                        {/* 傳輸動畫區 (非握手階段顯示) */}
+                        {stage !== 'ssl_handshake' && stage !== 'tcp_handshake' && (
+                            <div className="w-full h-32 relative flex items-center justify-center">
+                                {/* 傳輸線路 */}
+                                <div className="w-full h-1 bg-slate-300 absolute rounded-full"></div>
+                                
+                                {/* 傳輸中的封包 */}
+                                {stage === 'transmission' && (
+                                <div className="absolute z-20 flex flex-col items-center">
+                                    <div className="bg-blue-600 text-white p-2 rounded-lg shadow-lg mb-2">
+                                    {useSSL ? <Lock size={24} /> : <Unlock size={24} />}
+                                    </div>
+                                    <div className="text-xs font-bold text-slate-500 bg-white px-2 py-1 rounded shadow-sm border">
+                                    傳輸中...
+                                    </div>
+                                </div>
+                                )}
+                            </div>
+                        )}
+                        
+                        <div className="text-center bg-slate-50 px-3 py-1 rounded-full border border-slate-200 z-10 mt-auto">
+                            <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Internet</div>
+                        </div>
+                    </div>
+
+                    {/* 右側：接收端 (Receiver) */}
+                    <div className={`bg-white rounded-xl shadow-sm border border-slate-200 p-2 relative overflow-hidden transition-all duration-700 ease-in-out flex flex-col
+                        ${(stage === 'ssl_handshake' || stage === 'tcp_handshake') ? 'md:col-span-3' : 'md:col-span-4'}`}>
+                         {/* Session Key Indicator (Receiver) */}
+                         {useSSL && stage !== 'idle' && stage !== 'handshake' && stage !== 'ssl_handshake' && stage !== 'tcp_handshake' && (
+                            <div className="absolute top-2 left-2 bg-yellow-100 text-yellow-700 px-2 py-1 rounded-full text-xs font-bold flex items-center gap-1 border border-yellow-300 z-20">
+                                <Key size={12} /> 對稱金鑰已就緒
+                            </div>
+                        )}
+
+                        <div className="flex items-center gap-2 mb-2 pb-2 border-b border-slate-100 justify-end h-10 shrink-0">
+                            <h2 className="font-bold text-lg">接收端 (拆解)</h2>
+                            <Server className="text-green-600" />
+                        </div>
+                        
+                        <div className="flex-1 grid grid-rows-5 relative">
+                            {layers.map((layer) => {
+                                const isActive = isLayerActive(layer.id);
+                                const isDimmed = isLayerDimmed(layer.id);
+
+                                return (
+                                <div 
+                                    key={`receiver-${layer.id}`}
+                                    className={`p-1 rounded-lg border transition-all duration-300 flex justify-between items-center flex-row-reverse text-right
+                                    ${layer.color} /* Always apply base color */
+                                    ${isActive ? 'border-2 !border-slate-800 shadow-lg scale-[1.02] z-10' : 'border-opacity-50'}
+                                    ${isDimmed ? 'opacity-20 grayscale' : ''}`}
+                                >
+                                    <div className="w-1/3">
+                                        <div className="font-bold text-sm text-slate-700 truncate">{layer.name}</div>
+                                        <div className="text-[10px] text-slate-500 leading-tight truncate">{layer.desc}</div>
+                                    </div>
+
+                                    {/* Active Badge - Moved INSIDE top left corner */}
+                                    {isActive && (stage === 'tcp_handshake' || stage === 'ssl_handshake') && (
+                                        <div className="absolute left-2 top-1 bg-yellow-500 text-white text-[10px] px-2 py-0.5 rounded-full shadow-sm flex items-center gap-1 z-20 animate-pulse">
+                                            <Activity size={10} /> 互動中
+                                        </div>
+                                    )}
+
+                                    {/* 封包展示區 */}
+                                    <div className="flex-1 flex justify-start h-8">
+                                    {showReceiverPacket(layer.id) && (
+                                        <div className="animate-fade-in-right">
+                                        {renderPacket(layer.id, false)}
+                                        </div>
+                                    )}
+                                    </div>
+                                </div>
+                            )})}
+
+                            {/* 動態箭頭 - 使用百分比定位 */}
+                            {stage === 'decapsulation' && (
+                            <div className="absolute right-6 text-green-500 z-10 transition-all duration-300" 
+                                style={{ top: `${currentLayer * 20 + 10}%`, transform: 'translateY(-50%)' }}>
+                                <ArrowUp size={28} className="animate-bounce" />
+                            </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+
+                {/* 底部：日誌區：放寬到 7xl */}
+                <div className="max-w-[90%] md:max-w-7xl mx-auto bg-slate-900 text-slate-300 p-2 rounded-xl shadow-inner font-mono text-sm h-28 overflow-y-auto border border-slate-700">
+                    <div className="mb-2 text-slate-500 text-xs uppercase tracking-wider sticky top-0 bg-slate-900 pb-2 border-b border-slate-800 flex justify-between">
+                    <span>System Log</span>
+                    <span className={stage === 'tcp_handshake' ? 'text-blue-400 font-bold' : stage === 'ssl_handshake' ? 'text-purple-400 font-bold' : 'text-slate-400'}>
+                        Status: {stage === 'tcp_handshake' ? `TCP HANDSHAKE (${tcpStep}/3)` : stage === 'ssl_handshake' ? `SSL HANDSHAKE (${handshakeStep}/5)` : stage.toUpperCase()}
+                    </span>
+                    </div>
+                    {logMessages.length === 0 ? (
+                    <div className="text-slate-600 italic">請點擊「自動播放」或「逐步執行」開始...</div>
+                    ) : (
+                    logMessages.map((log, idx) => (
+                        <div key={idx} className="mb-1 animate-fade-in">
+                        <span className="text-slate-500 mr-2">[{log.time}]</span>
+                        <span className={
+                            log.text.includes('TCP') ? 'text-blue-300' :
+                            log.text.includes('SSL') ? 'text-purple-300' :
+                            log.text.includes('Handshake') ? 'text-purple-300' :
+                            log.text.includes('發送端') ? 'text-blue-400' : 
+                            log.text.includes('接收端') ? 'text-green-400' : 
+                            log.text.includes('應用層') ? 'text-yellow-400' :
+                            'text-slate-300'
+                        }>
+                            {log.text}
+                        </span>
+                        </div>
+                    ))
+                    )}
+                    {/* 自動捲動到底部的 dummy element */}
+                    <div ref={(el) => el && el.scrollIntoView({ behavior: "smooth" })}></div>
+                </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<TCPIPModel />);
+    </script>
+</body>
+</html>
