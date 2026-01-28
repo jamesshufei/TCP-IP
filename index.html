@@ -1,4 +1,4 @@
-!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
@@ -148,7 +148,7 @@
             // 判斷某一層是否應該變暗 (Dimmed)
             const isLayerDimmed = (layerId) => {
                 if (stage === 'idle' || stage === 'finished') return false;
-                // 在握手階段，非互動層級變暗
+                // 在交握階段，非互動層級變暗
                 if (stage === 'tcp_handshake' && layerId !== 1) return true;
                 if (stage === 'ssl_handshake' && layerId !== 0) return true;
                 // 在傳輸階段，非當前層級不變暗(保持可見)，或可選擇變暗
@@ -168,7 +168,7 @@
                     } else if (useSSL) {
                         setStage('ssl_handshake');
                         setHandshakeStep(1);
-                        addLog("SSL/TLS: 偵測到安全連線需求，開始握手程序...");
+                        addLog("SSL/TLS: 偵測到安全連線需求，開始交握程序...");
                         addLog("Handshake [1/5]: Client Hello (發送亂數 A (鹽) 與加密套件列表)");
                     } else {
                         setStage('encapsulation');
@@ -196,7 +196,7 @@
                         if (useSSL) {
                             setStage('ssl_handshake');
                             setHandshakeStep(1);
-                            addLog("SSL/TLS: TCP 連線已建立，開始進行 TLS 握手...");
+                            addLog("SSL/TLS: TCP 連線已建立，開始進行 TLS 交握...");
                             addLog("Handshake [1/5]: Client Hello (發送亂數 A (鹽) 與加密套件列表)");
                         } else {
                             setStage('encapsulation');
@@ -376,9 +376,9 @@
                 );
             };
 
-            // 渲染握手階段 (SSL/TCP) 的視覺化元件
+            // 渲染交交握階段 (SSL/TCP) 的視覺化元件
             const renderVisualOverlay = () => {
-                // 如果不是握手階段，不顯示
+                // 如果不是交握階段，不顯示
                 if (stage !== 'ssl_handshake' && stage !== 'tcp_handshake') return null;
 
                 // --- TCP Handshake Visuals ---
@@ -458,7 +458,7 @@
                 return (
                     <div className="absolute inset-0 flex flex-col items-center justify-center z-20 bg-slate-50/95 backdrop-blur-sm rounded-lg p-2 border-2 border-purple-200">
                         <div className="text-purple-700 font-bold mb-2 text-lg pt-1">
-                            TLS 握手階段 ({handshakeStep}/5)
+                            TLS 交握階段 ({handshakeStep}/5)
                             <span className="block text-xs font-normal text-slate-500 mt-1">互動層級：應用層 (Layer 5)</span>
                         </div>
                         
@@ -663,7 +663,7 @@
                     TCP/IP 模型封包封裝與拆解展示
                     </h1>
                     <p className="text-sm text-slate-600">
-                    觀察資料在每一層的變化，以及 SSL/TLS 如何透過握手建立安全通道。
+                    觀察資料在每一層的變化，以及 SSL/TLS 如何透過交握建立安全通道。
                     </p>
                 </div>
 
@@ -819,10 +819,10 @@
                         ${(stage === 'ssl_handshake' || stage === 'tcp_handshake') ? 'md:col-span-4' : 'md:col-span-2'}`}>
                         <div className="absolute inset-y-0 w-0.5 bg-slate-200 left-1/2 -z-10"></div>
                         
-                        {/* === 握手視覺化層 (Overlay) === */}
+                        {/* === 交握視覺化層 (Overlay) === */}
                         {renderVisualOverlay()}
 
-                        {/* 傳輸動畫區 (非握手階段顯示) */}
+                        {/* 傳輸動畫區 (非交握階段顯示) */}
                         {stage !== 'ssl_handshake' && stage !== 'tcp_handshake' && (
                             <div className="w-full h-32 relative flex items-center justify-center">
                                 {/* 傳輸線路 */}
